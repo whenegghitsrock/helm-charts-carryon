@@ -1,0 +1,13 @@
+{{- if .Values.internalTLS }}
+{{- if eq .Values.ingress.ingressClassName "traefik" }}
+apiVersion: traefik.containo.us/v1alpha1
+kind: ServersTransport
+metadata:
+  name: ks-console-transport
+spec:
+  serverName: ks-console
+  insecureSkipVerify: false
+  rootCAsSecrets:
+    - ks-console-tls-certs
+{{- end }}
+{{- end }}

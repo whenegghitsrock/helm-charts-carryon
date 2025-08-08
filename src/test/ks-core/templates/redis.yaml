@@ -1,0 +1,131 @@
+{{- if eq (include "multicluster.role" .) "host" }}
+{{- if and .Values.ha.enabled (not .Values.ha.cache) }}
+{{- if lookup "v1" "Secret" "kubesphere-system" "redis-secret" }}
+{{- lookup "v1" "Secret" "kubesphere-system" "redis-secret" | toYaml }}
+{{- else }}
+{{-  $auth := randAlphaNum 15 }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-secret
+type: Opaque
+stringData:
+  auth: {{ $auth | quote }}
+  redis.conf: |
+    requirepass {{ $auth }}
+    masterauth {{ $auth }}
+    port {{ .Values.redis.port | default 6379 }}
+{{- end }}
+{{- end }}
+
+{{- if and (and .Values.ha.enabled (not .Values.redisHA.enabled)) (not .Values.ha.cache) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: redis
+  name: redis
+spec:
+  replicas: {{ .Values.redis.replicaCount }}
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - image: {{ template "redis.image" . }}
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          command: ['sh', '-c', 'redis-server /etc/redis/redis.conf']
+          name: redis
+          args: ["/data/redis.conf"]
+          env:
+            - name: KUBESPHERE_CACHE_OPTIONS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: auth
+          volumeMounts:
+            - name: redis-config
+              mountPath: "/etc/redis/redis.conf"
+              subPath: redis.conf
+              readOnly: true
+{{- if .Values.redis.persistentVolume.enabled }}
+            - mountPath: /data
+              name: redis-pvc
+              subPath: redis-data
+{{- end }}
+          ports:
+            - containerPort: {{ .Values.redis.port | default 6379 }}
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1000Mi
+            requests:
+              cpu: 20m
+              memory: 100Mi
+      volumes:
+        - name: redis-config
+          secret:
+            secretName: redis-secret
+{{- if .Values.redis.persistentVolume.enabled }}
+        - name: redis-pvc
+          persistentVolumeClaim:
+            claimName: redis-pvc
+{{- end }}
+      affinity: {{ if .Values.affinity }}{{ .Values.affinity | toYaml | nindent 8 }}
+        {{- else }}
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/master
+                    operator: In
+                    values:
+                      - ""
+        {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector: {{- toYaml .Values.nodeSelector | nindent 8 }}{{- end }}
+      {{- if .Values.tolerations }}
+      tolerations: {{- toYaml .Values.tolerations | nindent 8 }}{{- end }}
+
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: redis
+  name: redis
+spec:
+  ports:
+    - name: redis
+      port: {{ .Values.redis.port | default 6379 }}
+      protocol: TCP
+      targetPort: {{ .Values.redis.port | default 6379 }}
+  selector:
+    app: redis
+  sessionAffinity: None
+  type: ClusterIP
+
+{{- if .Values.redis.persistentVolume.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.redis.persistentVolume.size | default "2Gi" }}
+{{- end }}
+
+{{- end }}
+{{- end }}

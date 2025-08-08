@@ -1,0 +1,19 @@
+{{ if eq (include "multicluster.role" .) "host" }}
+apiVersion: v1
+stringData:
+  configuration.yaml: |
+    name: kubesphere
+    secret: kubesphere
+    grantMethod: auto
+    trusted: true
+    scopeRestrictions:
+      - 'openid'
+      - 'email'
+      - 'profile'
+kind: Secret
+metadata:
+  name: oauthclient-kubesphere
+  labels:
+    config.kubesphere.io/type: oauthclient
+type: config.kubesphere.io/oauthclient
+{{ end }}

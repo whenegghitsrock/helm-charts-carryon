@@ -1,0 +1,18 @@
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  # - name: "image-pull-secret"
+
+kubectl:
+  image:
+    registry: ""
+    repository: kubesphere/kubectl
+    tag: "v1.27.16"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 1
+      memory: 1024Mi
+    requests:
+      cpu: 20m
+      memory: 100Mi
